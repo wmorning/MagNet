@@ -115,6 +115,11 @@ class DataProcessor(object):
             normshift = np.random.normal(1.0,0.01)
             self.X[i,:] = img.ravel() / np.max(img) * normshift
             self.Y[i,:] = src.ravel() / np.max(src) * normshift
+
+            # temporary fix for NaN problem --> set them to 0.
+            self.X[i,np.where(np.isnan(img.ravel()))] = 0.
+            self.Y[i,np.where(np.isnan(src.ravel()))] = 0.
+            
             
         return
         

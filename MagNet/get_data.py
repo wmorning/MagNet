@@ -13,7 +13,7 @@ class DataProcessor(object):
     A class to handle processing of data.
     '''
     
-    def __init__(self,datadir,m=25,numpix_side=192,pixel_size=0.04):
+    def __init__(self,datadir,m=25,numpix_side=192,pixel_size=0.04,bad_files_list=None):
         '''
         Initialize an instance of the class.  Give it the directory
         of the directories containing training/test data.
@@ -28,6 +28,22 @@ class DataProcessor(object):
         self.X = np.zeros([m,numpix_side**2])
         self.Y = np.zeros([m,numpix_side**2])
 
+        self.Xtest = np.zeros([10*m,numpix_side**2])
+        self.Ytest = np.zeros([10*m,numpix_side**2])
+        
+        self.tgi = np.zeros(10*m,dtype=bool)
+        self.good_image = np.ones(m,dtype=bool)
+        self.lens_model = np.zeros([m,7])
+        self.test_lens_model = np.zeros([10*m,7])
+
+        self.lens_models_train = np.loadtxt(datadir[0]+'parameters_train.txt')
+        self.lens_models_test  = np.loadtxt(datadir[0]+'parameters_test.txt' )
+        
+        if bad_files_list is not None:
+            self.bad_files = np.load(bad_files_list)
+        else:
+            self.bad_files = np.array([-1])
+        
     def pick_new_lens_center(self,ARCS,Y, numpix_side,pixel_size,xy_range = 0.5):
         '''
         We wont use this much yet, but we will eventually.  This function chooses a
@@ -94,31 +110,62 @@ class DataProcessor(object):
         
         if train_or_test =='test':
             # load test data.  This means we don't want it to be random anymore
-            #inds = range(self.m)
-            inds = np.random.randint(0,high=max_file_num,size = self.m)
+            inds = range(10*self.m) 
+            for i in range(10*self.m):
+                file_path = np.random.choice(self.datadir)
+                file_path_X = file_path+train_or_test+'_'+"%07d"%(inds[i]+1)+'.png'
+                file_path_Y = file_path+train_or_test+'_'+"%07d"%(inds[i]+1)+'_source.png'
+            
+                # Load images.  If src is not the proper size, lets interpolate it so that it is :)
+                img = np.array(Image.open(file_path_X),dtype='float32')/65535.0
+                src = np.array(Image.open(file_path_Y).resize((self.numpix_side,self.numpix_side,),resample=Image.BILINEAR),dtype='float32')/65535.0 
+            
+            
+                # if train, set training data, otherwise set test data
+                # randomly shift normalization, but keep physics intact
+                normshift = np.random.normal(1.0,0.01)
+                self.Xtest[i,:] = img.ravel() / np.max(img) * normshift
+                self.Ytest[i,:] = src.ravel() / np.max(src) * normshift
+                self.test_lens_model[i,:] = self.lens_models_train[inds[i],:7]
+
+                # again, fix for NaN problem
+                if (np.any(np.isnan(self.Xtest)) or np.any(np.isnan(self.Ytest))):
+                    self.Xtest[i,:] = 0.
+                    self.Ytest[i,:] = 0.
+                    self.tgi[i] = False
+                else:
+                    self.tgi[i] = True
+                
         else:
             # load training data (randomly)
-            inds = np.random.randint(0,high=max_file_num,size = self.m)
-        for i in range(self.m):
+            inds = np.random.choice(np.setdiff1d(np.arange(self.max_file_num),self.bad_files-1),size = self.m,replace=False)
+            for i in range(self.m):
             
-            file_path = np.random.choice(self.datadir)
-            file_path_X = file_path+train_or_test+'_'+"%07d"%(inds[i]+1)+'.png'
-            file_path_Y = file_path+train_or_test+'_'+"%07d"%(inds[i]+1)+'_source.png'
+                file_path = np.random.choice(self.datadir)
+                file_path_X = file_path+train_or_test+'_'+"%07d"%(inds[i]+1)+'.png'
+                file_path_Y = file_path+train_or_test+'_'+"%07d"%(inds[i]+1)+'_source.png'
             
-            # Load images.  If src is not the proper size, lets interpolate it so that it is :)
-            img = np.array(Image.open(file_path_X),dtype='float32')/65535.0
-            src = np.array(Image.open(file_path_Y).resize((self.numpix_side,self.numpix_side,),resample=Image.BILINEAR),dtype='float32')/65535.0 
+                # Load images.  If src is not the proper size, lets interpolate it so that it is :)
+                img = np.array(Image.open(file_path_X),dtype='float32')/65535.0
+                src = np.array(Image.open(file_path_Y).resize((self.numpix_side,self.numpix_side,),resample=Image.BILINEAR),dtype='float32')/65535.0 
             
             
-            # if train, set training data, otherwise set test data
-            # randomly shift normalization, but keep physics intact
-            normshift = np.random.normal(1.0,0.01)
-            self.X[i,:] = img.ravel() / np.max(img) * normshift
-            self.Y[i,:] = src.ravel() / np.max(src) * normshift
+                # if train, set training data, otherwise set test data
+                # randomly shift normalization, but keep physics intact
+                normshift = np.random.normal(1.0,0.01)
+                self.X[i,:] = img.ravel() / np.max(img) * normshift
+                self.Y[i,:] = src.ravel() / np.max(src) * normshift
+                self.lens_model[i,:] = self.lens_models_train[inds[i],:7]
 
-            # temporary fix for NaN problem --> set them to 0.
-            self.X[i,np.where(np.isnan(img.ravel()))] = 0.
-            self.Y[i,np.where(np.isnan(src.ravel()))] = 0.
+                # temporary fix for NaN problem --> set them to 0.
+                if (np.any(np.isnan(self.X)) or np.any(np.isnan(self.Y))):
+                    self.X[i,:] = 0.
+                    self.Y[i,:] = 0.
+                    self.good_image[i] = False
+                else:
+                    self.good_image[i] = True
+
+        print np.any(np.isnan(self.X)),np.any(np.isnan(self.Y))
             
             
         return

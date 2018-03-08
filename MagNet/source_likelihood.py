@@ -1,3 +1,6 @@
+import tensorflow as tf
+import numpy as np
+
 
 
 class SrcLikelihood(object):
@@ -160,9 +163,9 @@ class SrcLikelihood(object):
     
         q = 1-tf.sqrt(tf.add(tf.square(self.ex),tf.square(self.ey)))
         qp = tf.sqrt(1-tf.square(q))
-        angle = tf.atan2(self.ey,self.ex)
+        angle = atan2(self.ey,self.ex)
         shear = tf.sqrt(tf.square(self.gx)+tf.square(self.gy))
-        shearang = tf.subtract(tf.atan2(self.gy,self.gx) , angle)
+        shearang = tf.subtract(atan2(self.gy,self.gx) , angle)
         g1 = tf.multiply(shear,-tf.cos(tf.scalar_mul(2,shearang)))
         g2 = tf.multiply(shear,-tf.sin(tf.scalar_mul(2,shearang)))
         g3 = tf.multiply(shear,-tf.sin(tf.scalar_mul(2,shearang)))
@@ -177,9 +180,9 @@ class SrcLikelihood(object):
         rad , th = cart2pol(ygrid,xgrid)
         xgrid,ygrid = pol2cart(rad,tf.subtract(th,angle))
         
-        par = tf.atan2(ygrid,xgrid)
+        par = atan2(ygrid,xgrid)
     
-        xsrc = tf.subtract(xgrid , tf.multiply(self.te , tf.multiply(tf.divide(tf.sqrt(q) , qp) , tf.asinh( tf.divide(tf.multiply(qp , tf.cos(par)) , q)))))
+        xsrc = tf.subtract(xgrid , tf.multiply(self.te , tf.multiply(tf.divide(tf.sqrt(q) , qp) , asinh( tf.divide(tf.multiply(qp , tf.cos(par)) , q)))))
         ysrc = tf.subtract(ygrid , tf.multiply(self.te , tf.multiply(tf.divide(tf.sqrt(q) , qp) , tf.asin(tf.multiply(qp , tf.sin(par))))))
         xsrc = tf.subtract(xsrc,tf.add(tf.multiply(g1,xgrid),tf.multiply(g2,ygrid)))
         ysrc = tf.subtract(ysrc,tf.add(tf.multiply(g3,xgrid),tf.multiply(g4,ygrid)))
@@ -196,7 +199,7 @@ def cart2pol(y,x):
     '''
     Convert from cartesian to polar coordinates (using tensors)
     '''
-    return tf.sqrt(tf.add(tf.square(y),tf.square(x))),tf.atan2(y,x)
+    return tf.sqrt(tf.add(tf.square(y),tf.square(x))),atan2(y,x)
 
 def pol2cart(r,th):
     '''
@@ -204,3 +207,16 @@ def pol2cart(r,th):
     '''
     return tf.multiply(r,tf.cos(th)) , tf.multiply(r,tf.sin(th))
                          
+def atan2(y,x):
+    ''' 
+    because tensorflow didn't add it until later >:(
+    '''
+    tan1 = tf.atan(tf.divide(y,x))
+    tan1 = tf.add(tan1,tf.multiply(tf.multiply(tf.sign(y),tf.constant(np.pi)),tf.cast(tf.less(x,0),tf.float32)))
+    return tan1
+
+def asinh(x):
+    '''
+    tensorflow is worthless
+    '''
+    return tf.log(tf.add(x,tf.sqrt(tf.add(tf.square(x),tf.constant(1.0)))))

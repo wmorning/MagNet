@@ -3,16 +3,49 @@ slim = tf.contrib.slim
 import time
 import numpy as np
 
-def DenseNet(x_image,numpix_out):
+def DenseNet(x_image, numpix_out, block_size = 12, growth_rate = 12, final_depth = 1):
     '''
     DenseNet takes an image tensor x_image as an input.  It returns a tensor of size
     [m,numpix_out,numpix_out,1], corresponding to the predicted image of the background
     source.
     
     Many of the helper functions here (those that build the network) were taken from 
-    the DenseNet implementation by the github user LaurentMazare
+    the DenseNet implementation by the github user LaurentMazare.
     '''
-    
+
+    layers = block_size
+    k = growth_rate
+    im_dim = x_image.shape[0]
+    is_training = tf.placeholder("bool", shape=[])
+    keep_prob = tf.placeholder(tf.float32)
+        
+        
+    #First conv layer, with 2k feature maps
+    X = conv2d(x_image, 1, 2*k,3)
+        
+    # First dense block, with input features from previous conv2d layer
+    X, features = block(X, layers, 2*k, k, is_training, keep_prob)
+
+    # First transition layer, preserving the number of features
+    X = batch_activ_conv(X, features, features, 1, is_training, keep_prob)
+    X = tf.nn.avg_pool(X, [1,2,2,1], [1,2,2,1], 'VALID')
+
+    # Second dense block, with input features equal to output features of previous block
+    X, features = block(X, layers, features, k, is_training, keep_prob)
+
+    # Second transition layer, preserving the number of features
+    X = batch_activ_conv(X, features, features, 1, is_training, keep_prob)
+    X = tf.nn.avg_pool(X, [1,2,2,1], [1,2,2,1], 'VALID')
+
+    # Third dense block, with input features equal to output features of previous block
+    X, features = block(X, layers, features, k, is_training, keep_prob)
+
+    # We perform a batch normalization and take a 1x1 conv to flatten the output to our final image
+    X = tf.contrib.layers.batch_norm(X, scale=True, is_training=is_training, updates_collection=None)
+    X = conv2d(X, features, final_depth, 1)
+
+    return X
+
     
     
 

@@ -3,7 +3,7 @@ slim = tf.contrib.slim
 import time
 import numpy as np
 
-def DenseNet(x_image, numpix_out, block_size = 12, growth_rate = 12, final_depth = 1):
+def DenseNet(x_image, numpix_out, arch='conv', block_size = 12, growth_rate = 12, final_depth = 1):
     '''
     DenseNet takes an image tensor x_image as an input.  It returns a tensor of size
     [m,numpix_out,numpix_out,1], corresponding to the predicted image of the background
@@ -41,9 +41,21 @@ def DenseNet(x_image, numpix_out, block_size = 12, growth_rate = 12, final_depth
         # Third dense block, with input features equal to output features of previous block
         X, features = block(X, layers, features, k, is_training, keep_prob)
 
-        # We perform a batch normalization and take a 1x1 conv to flatten the output to our final image
-        X = tf.contrib.layers.batch_norm(X, scale=True, is_training=is_training,updates_collections=None)
-        X = conv2d(X, features, final_depth, 1)
+        # We perform a batch normalization before our final processing
+        X = tf.contrib.layers.batch_norm(X, scale=True, is_training=is_training, updates_collections=None)
+        
+        # If 'conv' architecture, we take a final 1x1 conv layer with one filter, and use a relu activation 
+        if(arch = 'conv'):            
+            X = conv2d(X, features, final_depth, 1)
+            X = tf.nn.relu(X)
+
+        # If 'FC16' architecture, we take a 1x1 conv layer with 16 filters, which we flatten and feed to a 
+        # fully connected layer with numpix_out*numpix_out units, with relu activation
+        else if(arch = 'FC16'):
+            X = conv2d(X, features, 16, 1)
+            X = tf.contrib.layers.batch_norm(X, scale=True, is_training = is_training, updates_collections=None)
+	    X = tf.nn.relu(X)
+            X = tf.contrib.layers.fully_connected(X, numpix_out*numpix_out, activation_fn=tf.nn.relu)
 
     return X , is_training , keep_prob
 

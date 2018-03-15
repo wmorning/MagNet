@@ -55,6 +55,7 @@ def DenseNet(x_image, numpix_out, arch='conv', block_size = 12, growth_rate = 12
             X = conv2d(X, features, 16, 1)
             X = tf.contrib.layers.batch_norm(X, scale=True, is_training = is_training, updates_collections=None)
 	    X = tf.nn.relu(X)
+            X = X.flatten()
             X = tf.contrib.layers.fully_connected(X, numpix_out*numpix_out, activation_fn=tf.nn.relu)
 
     return X , is_training , keep_prob

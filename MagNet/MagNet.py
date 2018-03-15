@@ -7,6 +7,7 @@ slim = tf.contrib.slim
 import time
 import numpy as np
 from get_data import DataProcessor
+from DenseNet import DenseNet
 
 # =================================================================================================
 
@@ -14,10 +15,12 @@ class MagNet(object):
     '''
     '''
     
-    def __init__(self,numpix_side,pixel_size,m,datadir):
+    def __init__(self,numpix_side,pixel_size,m,datadir,bad_files_list = None, bad_test_files_list = None, downsample=1):
         # initialize data processor
         self.numpix_side = numpix_side
-        self.DataProcessor = DataProcessor(datadir,m,numpix_side,pixel_size)
+        self.numpix_out = numpix_side / downsample
+        assert numpix_side % downsample ==0
+        self.DataProcessor = DataProcessor(datadir,m,numpix_side,pixel_size,bad_files_list = bad_files_list, bad_test_files_list = bad_test_files_list,downsample=downsample)
         
         # initialize placeholders
         self.initialize_placeholders()
@@ -30,8 +33,8 @@ class MagNet(object):
         '''
         self.x = tf.placeholder(tf.float32,[None,self.numpix_side**2])
         self.x_image = tf.reshape(self.x,[-1,self.numpix_side,self.numpix_side,1]) 
-        self.y_= tf.placeholder(tf.float32,[None,self.numpix_side**2])
-        self.y_image = tf.reshape(self.y_,[-1,self.numpix_side,self.numpix_side,1])
+        self.y_= tf.placeholder(tf.float32,[None,self.numpix_out**2])
+        self.y_image = tf.reshape(self.y_,[-1,self.numpix_out,self.numpix_out,1])
         return
         
     def Choose_Network(self,network_name,TRANSFORM=False):
@@ -46,8 +49,15 @@ class MagNet(object):
         if TRANSFORM:
             self.TRANSFORM = True
             self.x_image , self.net_x, self.net_y = model_transformer(self.x_image , scope='transformer')
-        if network_name == 'Ensai_Autoencoder':
+        else:
             self.TRANSFORM = False
+
+        if network_name == 'DenseNet':
+            self.y_conv, self.is_training, self.keep_prob = DenseNet(self.x_image,numpix_out = self.numpix_out)
+            self.cost = Cost_AutoEncoder(self.y_conv,self.y_image)
+            self.network_variable_scope = 'DenseNet'
+
+        if network_name == 'Ensai_Autoencoder':
             self.y_conv = Ensai_AutoEncoder(self.x_image,scope='AutoEncoder')
             self.cost   = Cost_AutoEncoder(self.y_conv,self.y_image)
             self.network_variable_scope = 'AutoEncoder'
@@ -81,7 +91,7 @@ class MagNet(object):
             
             tstart = time.time()
             self.DataProcessor.load_data_batch(100000,'train')
-            _ , self.current_cost[n] = self.session.run([self.train_step,self.cost],feed_dict = {self.x:self.DataProcessor.X,self.y_:self.DataProcessor.Y})
+            _ , self.current_cost[n] = self.session.run([self.train_step,self.cost],feed_dict = {self.x:self.DataProcessor.X,self.y_:self.DataProcessor.Y,self.is_training:True,self.keep_prob:1.0})
             
             print n , self.current_cost[n] , time.time()-tstart
             

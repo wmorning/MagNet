@@ -13,7 +13,7 @@ class DataProcessor(object):
     A class to handle processing of data.
     '''
     
-    def __init__(self,datadir,m=25,numpix_side=192,pixel_size=0.04,bad_files_list=None):
+    def __init__(self,datadir,m=25,numpix_side=192,pixel_size=0.04,bad_files_list=None,bad_test_files_list=None,downsample=1):
         '''
         Initialize an instance of the class.  Give it the directory
         of the directories containing training/test data.
@@ -26,10 +26,10 @@ class DataProcessor(object):
         
         # create x and y to be loaded
         self.X = np.zeros([m,numpix_side**2])
-        self.Y = np.zeros([m,numpix_side**2])
+        self.Y = np.zeros([m,numpix_side**2/downsample**2])
 
         self.Xtest = np.zeros([10*m,numpix_side**2])
-        self.Ytest = np.zeros([10*m,numpix_side**2])
+        self.Ytest = np.zeros([10*m,numpix_side**2/downsample**2])
         
         self.tgi = np.zeros(10*m,dtype=bool)
         self.good_image = np.ones(m,dtype=bool)
@@ -44,6 +44,13 @@ class DataProcessor(object):
         else:
             self.bad_files = np.array([-1])
         
+        if bad_test_files_list is not None:
+            self.bad_test_files = np.load(bad_test_files_list)
+        else:
+            self.bad_test_files = np.array([-1])
+
+        self.ds = downsample
+
     def pick_new_lens_center(self,ARCS,Y, numpix_side,pixel_size,xy_range = 0.5):
         '''
         We wont use this much yet, but we will eventually.  This function chooses a
@@ -110,7 +117,7 @@ class DataProcessor(object):
         
         if train_or_test =='test':
             # load test data.  This means we don't want it to be random anymore
-            inds = range(10*self.m) 
+            inds = np.setdiff1d(np.arange(max_file_num),self.bad_test_files)[range(10*self.m)] 
             for i in range(10*self.m):
                 file_path = np.random.choice(self.datadir)
                 file_path_X = file_path+train_or_test+'_'+"%07d"%(inds[i]+1)+'.png'
@@ -120,13 +127,15 @@ class DataProcessor(object):
                 img = np.array(Image.open(file_path_X),dtype='float32')/65535.0
                 src = np.array(Image.open(file_path_Y).resize((self.numpix_side,self.numpix_side,),resample=Image.BILINEAR),dtype='float32')/65535.0 
             
-            
+                # Downsample the source if requested
+                src = src.reshape(src.shape[0]/self.ds,self.ds,src.shape[0]/self.ds,self.ds).sum(axis=(1,3))
+
                 # if train, set training data, otherwise set test data
                 # randomly shift normalization, but keep physics intact
                 normshift = np.random.normal(1.0,0.01)
                 self.Xtest[i,:] = img.ravel() / np.max(img) * normshift
                 self.Ytest[i,:] = src.ravel() / np.max(src) * normshift
-                self.test_lens_model[i,:] = self.lens_models_train[inds[i],:7]
+                self.test_lens_model[i,:] = self.lens_models_test[inds[i],:7]
 
                 # again, fix for NaN problem
                 if (np.any(np.isnan(self.Xtest)) or np.any(np.isnan(self.Ytest))):
@@ -138,7 +147,7 @@ class DataProcessor(object):
                 
         else:
             # load training data (randomly)
-            inds = np.random.choice(np.setdiff1d(np.arange(self.max_file_num),self.bad_files-1),size = self.m,replace=False)
+            inds = np.random.choice(np.setdiff1d(np.arange(max_file_num),self.bad_files-1),size = self.m,replace=False)
             for i in range(self.m):
             
                 file_path = np.random.choice(self.datadir)
@@ -149,6 +158,8 @@ class DataProcessor(object):
                 img = np.array(Image.open(file_path_X),dtype='float32')/65535.0
                 src = np.array(Image.open(file_path_Y).resize((self.numpix_side,self.numpix_side,),resample=Image.BILINEAR),dtype='float32')/65535.0 
             
+                # Downsample the source if requested                                                                       
+                src = src.reshape(src.shape[0]/self.ds,self.ds,src.shape[0]/self.ds,self.ds).sum(axis=(1,3))
             
                 # if train, set training data, otherwise set test data
                 # randomly shift normalization, but keep physics intact
@@ -165,7 +176,7 @@ class DataProcessor(object):
                 else:
                     self.good_image[i] = True
 
-        print np.any(np.isnan(self.X)),np.any(np.isnan(self.Y))
+#        print np.any(np.isnan(self.X)),np.any(np.isnan(self.Y))
             
             
         return

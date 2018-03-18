@@ -59,6 +59,19 @@ def DenseNet(x_image, numpix_out, arch='conv', block_size = 12, growth_rate = 12
             X = tf.contrib.layers.fully_connected(X, numpix_out*numpix_out, activation_fn=tf.nn.relu)
             
             X = tf.reshape(X,[-1,numpix_out,numpix_out,1])
+
+        # If 'FC16v2' architecture, we use the 'FC16' architecture with an additional fully connected layer
+        # at the end, again with numpix_out*numpix_out, with relu activation
+        elif arch == 'FC16v2':
+            X = conv2d(X, features, 16, 1)
+            X = tf.contrib.layers.batch_norm(X, scale=True, is_training = is_training, updates_collections=None)
+	    X = tf.nn.relu(X)
+            X = tf.contrib.layers.flatten(X)
+            X = tf.contrib.layers.fully_connected(X, numpix_out*numpix_out, activation_fn=tf.nn.relu)
+            X = tf.contrib.layers.fully_connected(X, numpix_out*numpix_out, activation_fn=tf.nn.relu)            
+
+
+            X = tf.reshape(X,[-1,numpix_out,numpix_out,1])
         else:  # no choice or bad specified.  Use conv, but warn the user
             print "your choice of network end is bad, but we'll take care of that for you\n"
             X = conv2d(X,features,final_depth,1)

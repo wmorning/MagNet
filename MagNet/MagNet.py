@@ -37,7 +37,7 @@ class MagNet(object):
         self.y_image = tf.reshape(self.y_,[-1,self.numpix_out,self.numpix_out,1])
         return
         
-    def Choose_Network(self,network_name,TRANSFORM=False):
+    def Choose_Network(self,network_name,TRANSFORM=False,densenet_arch='conv'):
         '''
         Pick the network.  for now, there is only one 
         valid choice, which is the AutoEncoder.  We can add 
@@ -53,7 +53,7 @@ class MagNet(object):
             self.TRANSFORM = False
 
         if network_name == 'DenseNet':
-            self.y_conv, self.is_training, self.keep_prob = DenseNet(self.x_image,numpix_out = self.numpix_out)
+            self.y_conv, self.is_training, self.keep_prob = DenseNet(self.x_image,numpix_out = self.numpix_out,arch=densenet_arch)
             self.cost = Cost_AutoEncoder(self.y_conv,self.y_image)
             self.network_variable_scope = 'DenseNet'
 
@@ -70,7 +70,7 @@ class MagNet(object):
         if self.TRANSFORM:
             self.transformer_saver = tf.train.Saver(slim.get_variables(scope='transformer'))
         
-        self.train_step = tf.train.AdamOptimizer(1.0e-6).minimize(self.cost)
+        self.train_step = tf.train.AdamOptimizer(5.0e-7).minimize(self.cost)
         self.session    = tf.Session()
         self.session.run(tf.global_variables_initializer())
         
